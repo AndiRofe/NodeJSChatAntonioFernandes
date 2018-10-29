@@ -1,0 +1,237 @@
+<!doctype html>
+<html>
+<head>
+    <title>Sala de Conversação - TeSP DWM</title>
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+
+
+    <style>
+        .listaUtilizadores {
+            overflow:hidden;
+            margin-top: 40px;
+            margin-left: 20px;
+        }
+        .chat {
+            width: 100%;
+            height: 540px;
+            border: 2px solid;
+            overflow: hidden;
+            padding: 10px
+        }
+        .mensagensPrivadas {
+            position: fixed;
+            top: 415px;
+            z-index:10;
+        }
+        .botaoPrivadas{
+            width:100%;
+        }
+        .botaoMensagem{
+            width:115px;
+        }
+
+    </style>
+
+</head>
+ 
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+
+<script>
+
+    $(function () {
+        var socket = io();
+
+        //Retirado de -https://stackoverflow.com/questions/979975/how-to-get-the-value-from-the-get-parameters
+        function gup(name, url) {
+            if (!url) url = location.href;
+            name = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+            var regexS = "[\\?&]" + name + "=([^&#]*)";
+            var regex = new RegExp(regexS);
+            var results = regex.exec(url);
+            return results == null ? null : results[1];
+        }
+
+        //Retira o nome do URl da pagina
+        var nome = gup('nome');
+
+        $('#clienteLogado').append(nome);
+
+
+        //Define o Id da sessao ao Id do cliente no array Utilizadores
+        socket.emit('entrouNoChat', { nome: nome });
+
+ 
+        socket.on('mostrarClientes', function (dados) {
+
+            var select = document.getElementById("user");
+            var ul = document.getElementById("utilizadoresOnline");
+
+            //limpa os dados
+            ul.innerHTML = "";
+            select.innerHTML = "";
+
+
+            //Preenche o select de mensagens privadas e os utilizadores onlines
+
+            dados.utilizadores.forEach(function (x) {
+                if (nome == x.nome) {
+                    $('#utilizadoresOnline').append($('<li>').html('<strong> Eu </strong>'));
+                    return;
+                } else {
+                    select.options.add(new Option(x.nome, x.nome))
+                    $('#utilizadoresOnline').append($('<li>').text(x.nome));
+                }
+            });
+
+        });
+
+        //Enviar Mensagem
+        $('form').submit(function () {
+
+            var msg = $('#m').val();
+
+            //Valida se o campo de escrever está vazio
+            if (msg == "") {
+                alert("Preencha primeiro a sua mensagem!");
+            }
+            else {
+                socket.emit('envioMensagem', { msg: msg, nome: nome });
+                $('#mensagens').append($('<li>').text('Eu: ' + msg));
+                $('#m').val('');
+                return false;
+            }
+        });
+
+        //Enviar Mensagem Privada
+        document.getElementById("enviarMsgPrivada").addEventListener('click', function () {
+
+            var msg = $('#mensagem').val();
+            var userDestino = $('#user').val();
+
+            //validação se o user de destino está selecionado e se o campo de mensagem preenchido
+            if (msg == "" || userDestino == null) {
+                alert("Confirme se preencheu o campo mensagem e escolheu o utilizador que deseja enviar a mensagem")
+            } else {
+                socket.emit('mensagensPrivadas', { msg: msg, userDestino: userDestino });
+                
+                $('#mensagens').append($('<li>').html('<span style="color:red"><strong>Eu</strong></span>: ' + msg));
+                $('#mensagem').val('');
+                return false;
+            }
+
+        }, false);
+
+        //Novo Utilizador no Chat
+        socket.on('mensagemGeralEntrou', function (nome) {
+            $('#mensagens').append($('<li>').text('O ' + nome + ' entrou no chat!'));
+        });
+
+        //Mensagem Utilizador Saiu
+        socket.on('mensagemGeralSaiu', function (nome) {
+            $('#mensagens').append($('<li>').text('O ' + nome + ' saiu do chat!'));
+        });
+        
+
+        // -------------------- RECEBER MENSAGENS --------------
+
+        //Mensagem Recebida Por
+        socket.on('envioMensagemUser', function (msg) {
+            $('#mensagens').append($('<li>').text(msg));
+        });
+
+        //Mensagem privada
+        socket.on('mensagemPrivadaUser', function (dados) {
+
+            var msg = dados.msg;
+            var user = dados.user;
+
+            $('#mensagens').append($('<li>').html('<strong>Mensagem privada de ' + user + '</strong>: ' + msg));
+
+        })
+
+
+        var input = document.getElementById("m");
+
+        input.onkeyup = function () {
+            delay(function () {
+                socket.emit("parouEscrever");
+            }, 2000);
+        }
+
+        //Escrevendo
+        input.onkeydown = function () {
+            socket.emit("escrevendo");
+        }
+
+        socket.on("utilizadorescrevendo", function (dados) {
+            document.getElementById("escrever").innerHTML = "O utilizador " + dados.utilizador + " está a escrever!"
+        });
+
+        socket.on("parouEscrever", function () {
+            document.getElementById("escrever").innerHTML = "";
+        });
+
+        //Retirado de um Website
+        var delay = (function () {
+            var timer = 0;
+            return function (callback, ms) {
+                clearTimeout(timer);
+                timer = setTimeout(callback, ms);
+            };
+        })();
+    });
+</script>
+
+
+<body>
+    <div class="container-fluid">
+        <div class="col-md-3 listaUtilizadores">
+            <h3><b>Users no Chat</b></h3>
+            <div class="usersOnline">
+                <ul id="utilizadoresOnline"></ul>
+                <div class="mensagensPrivadas">
+                    <h3>Enviar Mensagem Privada</h3>
+
+                    <div class="form-group">
+                        <label for="mensagem">Mensagem</label>
+                        <input type="text" class="form-control" id="mensagem">
+
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mensagem">Utilizador</label>
+                        <select class="form-control" id="user" name="user"></select>
+                    </div>
+
+                    <div class="form-group">
+                        <button type="button" class="btn btn-primary center-block botaoPrivadas" id="enviarMsgPrivada">Enviar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="form-group">
+                <div class="form-group">
+                    <h2 id="clienteLogado">Utilizador: </h2>
+
+                    <div class="chat">
+                        <ul id="mensagens"></ul>
+                    </div>
+
+                </div>
+                <form action="" id="form">
+                    <div class="form-group">
+                        <input type="text" size="150px" id="m" autocomplete="off"/>
+                        <input type="submit" class="btn btn-success botaoMensagem" value="Enviar" />
+                        <h6 id="escrever"></h6>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
